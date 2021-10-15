@@ -1,0 +1,8 @@
+navbar:
+  title: Tran Minh Nhat
+  left: 
+  - text: Author
+    href: content.html
+output:
+  html_document:
+    theme: flatly

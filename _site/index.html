@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+
+
+<title>Improving Object Detection by Label Assignment Distillation</title>
+
+<script src="site_libs/header-attrs-2.11/header-attrs.js"></script>
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/flatly.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark it active
+  menuAnchor.tab('show');
+
+  // if it's got a parent navbar menu mark it active as well
+  menuAnchor.closest('li.dropdown').addClass('active');
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">Tran Minh Nhat</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="content.html">Author</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+
+
+<h1 class="title toc-ignore">Improving Object Detection by Label Assignment Distillation</h1>
+
+</div>
+
+
+<div id="đề-bài" class="section level2">
+<h2>Đề bài</h2>
+<p>Tập tin <strong>heat_data</strong> được thu thập với mục tiêu đánh giá các nhân tố ảnh hưởng đến mức độ thu nhiệt và toả nhiệt của các ngôi nhà.</p>
+<p>Các biến chính trong bộ dữ liệu:</p>
+<p>-<strong>X1</strong>: Độ nhỏ gọn</p>
+<p>-<strong>X2</strong>: Diện tích bề mặt</p>
+<p>-<strong>X3</strong>: Diện tích tường</p>
+<p>-<strong>X4</strong>: Diện tích mái nhà</p>
+<p>-<strong>X5</strong>: Chiều cao tổng thể</p>
+<p>-<strong>X6</strong>: Định hướng</p>
+<p>-<strong>X7</strong>: Diện tích kính</p>
+<p>-<strong>X8</strong>: Phân bố khu vực dán kính</p>
+<p>-<strong>Y1</strong>: Mức độ thu nhiệt</p>
+<p>-<strong>Y2</strong>: Mức độ toả nhiệt</p>
+<p><strong>Yêu cầu:</strong></p>
+<ol style="list-style-type: decimal">
+<li><p>Đọc dữ liệu (Import data): heat_data.csv</p></li>
+<li><p>Làm sạch dữ liệu (Data cleaning): NA (dữ liệu khuyết)</p></li>
+<li><p>Làm rõ dữ liệu: (Data visualization)</p></li>
+</ol>
+<ol style="list-style-type: lower-alpha">
+<li><p>Chuyển đổi biến (nếu cần thiết).</p></li>
+<li><p>Thống kê mô tả: dùng thống kê mẫu và dùng đồ thị.</p></li>
+</ol>
+<ol start="4" style="list-style-type: decimal">
+<li><p>Mô hình hồi quy tuyến tính : Sử dụng một mô hình hổi quy tuyến tính phù hợp để đánh giá các nhân tố tác động đến mức độ thu nhiệt của các ngôi nhà.</p></li>
+<li><p>t.test: Đề xuất một kiểm định phù hợp để so sánh trung bình mức thu nhiệt và toả nhiệt của các ngôi nhà</p></li>
+</ol>
+</div>
+<div id="thực-hiện-yêu-cầu" class="section level2">
+<h2>Thực hiện yêu cầu</h2>
+<p><strong>1. Đọc dữ liệu (Import data):</strong></p>
+<p>Sử dụng hàm <strong>read_excel</strong> để đọc dữ liệu đầu vào định dạng Excel</p>
+<pre class="r"><code>library(readxl)
+heat_data &lt;- read_excel(&quot;D:/CodeR-XSTK/Chude5/heat_data.xlsx&quot;)
+head(heat_data,6) ##Xem 6 dòng đầu tiên của dữ liệu &#39;heat_data&#39;</code></pre>
+<pre><code>## # A tibble: 6 x 10
+##      X1    X2    X3    X4    X5    X6    X7    X8    Y1    Y2
+##   &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
+## 1  0.98  514.  294   110.     7     2     0     0  15.6  21.3
+## 2  0.98  514.  294   110.     7     3     0     0  15.6  21.3
+## 3  0.98  514.  294   110.     7     4     0     0  15.6  21.3
+## 4  0.98  514.  294   110.     7     5     0     0  15.6  21.3
+## 5  0.9   564.  318.  122.     7     2     0     0  20.8  28.3
+## 6  0.9   564.  318.  122.     7     3     0     0  21.5  25.4</code></pre>
+<p>Thông tin các biến có trong dữ liệu:</p>
+<p>-<strong>X1</strong>: Độ nhỏ gọn</p>
+<p>-<strong>X2</strong>: Diện tích bề mặt (m^2)</p>
+<p>-<strong>X3</strong>: Diện tích tường (m^2)</p>
+<p>-<strong>X4</strong>: Diện tích mái nhà (m^2)</p>
+<p>-<strong>X5</strong>: Chiều cao tổng thể (m)</p>
+<p>-<strong>X6</strong>: Định hướng (2: Bắc, 3: Đông, 4: Nam, 5: Tây)</p>
+<p>-<strong>X7</strong>: Diện tích kính (0%, 10%, 25%, 40% so với diện tích sàn)</p>
+<p>-<strong>X8</strong>: Phân bố khu vực dán kính (1: Đồng nhất, 2: Bắc, 3: Đông, 4: Nam, 5: Tây)</p>
+<p>-<strong>Y1</strong>: Mức độ thu nhiệt (kWh)</p>
+<p>-<strong>Y2</strong>: Mức độ toả nhiệt (kWh)</p>
+<p><strong>2. Làm sạch dữ liệu (Data cleaning):</strong></p>
+<p>Sử dụng các lệnh <strong>apply</strong> kết hợp <strong>is.na</strong> và <strong>which</strong> để kiểm tra dữ khuyết (NA)</p>
+<pre class="r"><code>apply(is.na(heat_data),2,which) #Kiem tra du lieu khuyet</code></pre>
+<pre><code>## integer(0)</code></pre>
+<p><strong>Nhận xét</strong>: Như vậy dựa trên kết quả xuất ra, không có dữ liệu khuyết cần xử lí và làm sạch</p>
+<p><strong>3. Làm rõ dữ liệu (Data visualization):</strong></p>
+<p>Thực hiện thống kê mô tả cho các biến <strong>X1, X2, X3, X4, Y1, Y2</strong> bằng cách sử dụng lệnh <strong>apply</strong> kết hợp với các thuộc tính, đặc trưng <strong>mean, sd, quantile, median, max, min</strong></p>
+<pre class="r"><code>mean &lt;-apply(heat_data[,c(1,2,3,4,9,10)],2,mean) #Tính trung bình mẫu
+sd &lt;-apply(heat_data[,c(1,2,3,4,9,10)],2,sd) #Tính độ lệch mẫu hiệu chỉnh 
+median &lt;-apply(heat_data[,c(1,2,3,4,9,10)],2,median) #Tính trung vị
+Q1 &lt;-apply(heat_data[,c(1,2,3,4,9,10)],2,quantile, probs=0.25) #Tính phân vị 1
+Q3 &lt;-apply(heat_data[,c(1,2,3,4,9,10)],2,quantile, probs=0.75) #Tính phân vị 3
+max &lt;-apply(heat_data[,c(1,2,3,4,9,10)],2,max) 
+min &lt;-apply(heat_data[,c(1,2,3,4,9,10)],2,min) 
+descriptive_statistic &lt;- t(data.frame(mean,sd,Q1,median,Q3,max,min)) #Tạo bảng thống kê các đặc trưng của mẫu
+descriptive_statistic #Xem bảng thống kê</code></pre>
+<pre><code>##               X1        X2        X3        X4      Y1        Y2
+## mean   0.7641667 671.70833 318.50000 176.60417 22.3072 24.587760
+## sd     0.1057775  88.08612  43.62648  45.16595 10.0902  9.513306
+## Q1     0.6825000 606.37500 294.00000 140.87500 12.9925 15.620000
+## median 0.7500000 673.75000 318.50000 183.75000 18.9500 22.080000
+## Q3     0.8300000 741.12500 343.00000 220.50000 31.6675 33.132500
+## max    0.9800000 808.50000 416.50000 220.50000 43.1000 48.030000
+## min    0.6200000 514.50000 245.00000 110.25000  6.0100 10.900000</code></pre>
+<p>Lập bảng thống kê cho biến phân loại <strong>X5, X6, X7, X8</strong>, dùng lệnh <strong>table</strong>:<br />
+<strong>a. Thống kê số lượng ngôi nhà theo chiều cao tổng thể </strong></p>
+<pre class="r"><code>table(heat_data$X5) </code></pre>
+<pre><code>## 
+## 3.5   7 
+## 384 384</code></pre>
+<p><strong>b. Thống kê số lượng ngôi nhà theo các định hướng</strong></p>
+<pre class="r"><code>table(heat_data$X6)</code></pre>
+<pre><code>## 
+##   2   3   4   5 
+## 192 192 192 192</code></pre>
+<p><strong>c. Thống kê số lượng ngôi nhà theo diện tích kính</strong></p>
+<pre class="r"><code>table(heat_data$X7)</code></pre>
+<pre><code>## 
+##    0  0.1 0.25  0.4 
+##   48  240  240  240</code></pre>
+<p><strong>d. Thống kê số lượng ngôi nhà theo phân bố khu vực dán kính</strong></p>
+<pre class="r"><code>table(heat_data$X8)</code></pre>
+<pre><code>## 
+##   0   1   2   3   4   5 
+##  48 144 144 144 144 144</code></pre>
+<p><strong>Vẽ biểu đồ phân phối tần số cho biến Y1 và Y2</strong>:</p>
+<pre class="r"><code>par(mfrow = c(1, 2))
+hist(heat_data$Y1,xlab=&quot;Heating Load&quot;,main=&quot;Histogram of Heating Load&quot;,label=T,ylim= c(0,300),col=&quot;lightskyblue1&quot;) #Bieu do cho Y1
+hist(heat_data$Y2,xlab=&quot;Cooling Load&quot;,main=&quot;Histogram of Cooling Load&quot;,label=T,ylim=c(0,250), col=&quot;red&quot;) #Bieu do cho Y2</code></pre>
+<p><img src="index_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<p>Vẽ biểu đồ hộp thể hiện phân phối của <strong>Y1</strong>, <strong>Y2</strong> theo phân loại của biến <strong>X5</strong>. Dùng lệnh vẽ <strong>Boxplot</strong></p>
+<pre class="r"><code>par(mfrow = c(1, 2))
+boxplot(Y1~X5,heat_data,xlab =&quot;Overall Height&quot;,ylab=&quot;Heating Load&quot;,main=&quot;Heating Load and Overall Height&quot;,col=&quot;red&quot;) #Phân phối của Y1 theo phân loại biến X5
+boxplot(Y2~X5,heat_data,xlab =&quot;Overall Height&quot;,ylab=&quot;Cooling Load&quot;,main=&quot;Cooling Load and Overall Height&quot;,col=&quot;lightskyblue1&quot;) #Phân phối của Y2 theo phân loại biến X5</code></pre>
+<p><img src="index_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
+<p><strong>Nhận xét:</strong> Dựa trên biểu đồ, ta có thể thấy mức độ thu nhiệt và toả nhiệt của các ngôi nhà có chiều cao 7m cao hơn so với có chiều cao 3.5m. ta có thể dự đoán chiều cao tổng thể là một nhân tố ảnh hưởng đến mức độ thu nhiệt hay toả nhiệt.</p>
+<p>Dùng lệnh <strong>Boxplot</strong> để vẽ biểu đồ hộp thể hiện phân phối của <strong>Y1, Y2</strong> theo phân loại của biến <strong>X6</strong></p>
+<pre class="r"><code>par(mfrow = c(1, 2))
+boxplot(Y1~X6,heat_data,xlab =&quot;Orientation&quot;,ylab=&quot;Heating Load&quot;,main=&quot;Heating Load and Orientation&quot;,col=&quot;lightblue&quot;) #Phan phoi cua Y1 theo phan loai bien X6
+boxplot(Y2~X6,heat_data,xlab =&quot;Orientation&quot;,ylab=&quot;Cooling Load&quot;,main=&quot;Cooling Load and Orientation&quot;,col=&quot;pink&quot;) #Phan phoi cua Y2 theo phan loai bien X6</code></pre>
+<p><img src="index_files/figure-html/unnamed-chunk-10-1.png" width="672" /></p>
+<p><strong>Nhận xét</strong>: Dựa trên biểu đồ, ta có thể thấy các ngôi nhà có định hướng khác nhau đều mức độ thu nhiệt và toả nhiệt tương đối như nhau. Ta có thể dự đoán định hướng là một nhân tố không ảnh hưởng đến mức độ thu nhiệt hay toả nhiệt.</p>
+<p>Dùng lệnh <strong>Boxplot</strong> để vẽ biểu đồ hộp thể hiện phân phối của <strong>Y1, Y2</strong> theo phân loại của biến <strong>X7</strong></p>
+<pre class="r"><code>par(mfrow = c(1, 2))
+boxplot(Y1~X7,heat_data,xlab =&quot;Glazing Area&quot;,ylab=&quot;Heating Load&quot;,main=&quot;Heating Load and Glazing Area&quot;,col=&quot;salmon1&quot;) #Phan phoi cua Y1 theo phan loai bien X7
+boxplot(Y2~X7,heat_data,xlab =&quot;Glazing Area&quot;,ylab=&quot;Cooling Load&quot;,main=&quot;Heating Load and Glazing Area&quot;,col=&quot;lightskyblue1&quot;) #Phan phoi cua Y2 theo phan loai bien X6</code></pre>
+<p><img src="index_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
+<p><strong>Nhận xét</strong>: Dựa trên biểu đồ, ta có thể thấy các ngôi nhà có diện tích kính càng cao (so với diện tích sàn) thì phân bố mức độ thu nhiệt và toả nhiệt càng cao. Ta có thể dự đoán diện tích kính là một nhân tố ảnh hưởng đến mức độ thu nhiệt hay toả nhiệt.</p>
+<p>Dùng lệnh <strong>Boxplot</strong> để vẽ biểu đồ hộp thể hiện phân phối của <strong>Y1, Y2</strong> theo phân loại của biến <strong>X8</strong></p>
+<pre class="r"><code>par(mfrow = c(1, 2))
+boxplot(Y1~X8,heat_data,xlab =&quot;Glazing Area Distribution&quot;,ylab=&quot;Heating Load&quot;,main=&quot;Heating Load and GA Distribution&quot;,col=&quot;green&quot;,cex.main=1.1) #Phan phoi cua Y1 theo phan loai bien X8
+boxplot(Y2~X8,heat_data,xlab =&quot;Glazing Area Distribution&quot;,ylab=&quot;Cooling Load&quot;,main=&quot;Cooling Load and GA Distribution&quot;, col=&quot;orange&quot;,cex.main=1.1) #Phan phoi cua Y2 theo phan loai bien X7</code></pre>
+<p><img src="index_files/figure-html/unnamed-chunk-12-1.png" width="672" /></p>
+<p><strong>Nhận xét:</strong> Dựa trên biểu đồ, các ngôi nhà có phân bố khu vực dán kính đều có phân bố mức độ thu nhiệt và toả nhiệt tương đối như nhau, riêng trường hợp những ngôi nhà không dán kính thì phân bố mức độ thu nhiệt và toả nhiệt thấp hơn. Ta có thể đoán rằng việc dán kính hay không có thể ảnh hưởng đến phân bố mức độ thu nhiệt và toả nhiệt, tuy nhiên việc phân bố khu vực dán kính có thể không ảnh hưởng đến phân bố mức độ thu nhiệt và toả nhiệt.</p>
+<p>Vẽ biểu đồ phân phối của <strong>Y1</strong>, <strong>Y2</strong> theo biến <strong>X1</strong></p>
+<pre class="r"><code>par(mfrow = c(1, 2))
+plot(heat_data$X1,heat_data$Y1,col=&quot;orange&quot;,xlab=&quot;Relative Compactness&quot;,ylab=&quot;Heating Load&quot;,main=&quot;Heating Load and Compactness&quot;, pch = 18) #Vẽ biểu đồ phân tán thể hiện phân phối của &#39;Y1&#39; theo biến &#39;X1&#39;
+plot(heat_data$X1,heat_data$Y2,col=&quot;blue&quot;,xlab=&quot;Relative Compactness&quot;,ylab=&quot;Cooling Load&quot;,main=&quot;Cooling Load and Compactness&quot;, pch = 18) #Vẽ biểu đồ phân tán thể hiện phân phối của &#39;Y2&#39; theo biến &#39;X1&#39;</code></pre>
+<p><img src="index_files/figure-html/unnamed-chunk-13-1.png" width="672" /></p>
+<p>Vẽ biểu đồ phân phối của <strong>Y1</strong>, <strong>Y2</strong> theo biến <strong>X2</strong></p>
+<pre class="r"><code>par(mfrow = c(1, 2))
+plot(heat_data$X2,heat_data$Y1,col=&quot;orange&quot;,xlab=&quot;Surface Area&quot;,ylab=&quot;Heating Load&quot;,main=&quot;Heating Load and Surface Area&quot;, pch = 18) 
+
+plot(heat_data$X2,heat_data$Y2,col=&quot;blue&quot;,xlab=&quot;Surface Area&quot;,ylab=&quot;Cooling Load&quot;,main=&quot;Cooling Load and Surface Area&quot;, pch = 18) </code></pre>
+<p><img src="index_files/figure-html/unnamed-chunk-14-1.png" width="672" /></p>
+<p>Vẽ biểu đồ phân phối của <strong>Y1</strong>, <strong>Y2</strong> theo biến <strong>X3</strong></p>
+<pre class="r"><code>par(mfrow = c(1, 2))
+plot(heat_data$X3,heat_data$Y1,col=&quot;orange&quot;,xlab=&quot;Wall Area&quot;,ylab=&quot;Heating Load&quot;,main=&quot;Heating Load and Wall Area&quot;, pch = 18) 
+
+plot(heat_data$X3,heat_data$Y2,col=&quot;blue&quot;,xlab=&quot;Wall Area&quot;,ylab=&quot;Cooling Load&quot;,main=&quot;Cooling Load and Wall Area&quot;, pch = 18)  </code></pre>
+<p><img src="index_files/figure-html/unnamed-chunk-15-1.png" width="672" /></p>
+<p>Vẽ biểu đồ phân phối của <strong>Y1</strong>, <strong>Y2</strong> theo biến <strong>X4</strong></p>
+<pre class="r"><code>par(mfrow = c(1, 2))
+plot(heat_data$X4,heat_data$Y1,col=&quot;orange&quot;,xlab=&quot;Roof Area&quot;,ylab=&quot;Heating Load&quot;,main=&quot;Heating Load and Roof Area&quot;, pch = 18) 
+
+plot(heat_data$X4,heat_data$Y2,col=&quot;blue&quot;,xlab=&quot;Roof Area&quot;,ylab=&quot;Cooling Load&quot;,main=&quot;Cooling Load and Roof Area&quot;, pch = 18)  </code></pre>
+<p><img src="index_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
+<p><strong>Nhận xét</strong>: Từ các đồ thị phân tán, ta có thể nhận xét các biến <strong>X1</strong>, <strong>X2</strong>, <strong>X3</strong>, <strong>X4</strong> ta nhận thấy chưa thực sự rõ về mối quan hệ tuyến tính với biến <strong>Y1</strong> (hay <strong>Y2</strong>). Do đó, ta cần xây dựng mô hình hồi quy để đánh giá rõ hơn mối quan hệ giữa các biến lên <strong>Y1</strong> (hay <strong>Y2</strong>).</p>
+<p><strong>4. Mô hình hồi quy tuyến tính:</strong></p>
+<p>Mô hình hồi quy với với biến phụ thuộc là <strong>Y1</strong>, và giả sử các biến độc lập là: <strong>X1</strong>, <strong>X2</strong>, <strong>X3</strong>, <strong>X4</strong>, <strong>X5</strong>, <strong>X6</strong>, <strong>X7</strong>, <strong>X8</strong>.</p>
+<p>Mô hình được biểu diễn như sau:</p>
+<p><span class="math inline">\(Y1 = \alpha_0 + \alpha_1.X1 + \alpha_2.X2 + ... + \alpha_7.{X7} + \alpha_8.{X8}\)</span>.</p>
+<p>Sử dụng lệnh <strong>lm</strong> để xây dựng mô hình hồi quy tuyến tính và <strong>summary</strong> để tóm tắt kết quả:</p>
+<pre class="r"><code>model_1 = lm(Y1~X1+X2+X3+X4+X5+X6+X7+X8,heat_data)  #Mo hinh hoi quy tuyen tinh
+summary(model_1)  #Tom tat ket qua  </code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = Y1 ~ X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8, data = heat_data)
+## 
+## Residuals:
+##     Min      1Q  Median      3Q     Max 
+## -9.8965 -1.3196 -0.0252  1.3532  7.7052 
+## 
+## Coefficients: (1 not defined because of singularities)
+##               Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)  84.013418  19.033613   4.414 1.16e-05 ***
+## X1          -64.773432  10.289448  -6.295 5.19e-10 ***
+## X2           -0.087289   0.017075  -5.112 4.04e-07 ***
+## X3            0.060813   0.006648   9.148  &lt; 2e-16 ***
+## X4                  NA         NA      NA       NA    
+## X5            4.169954   0.337990  12.338  &lt; 2e-16 ***
+## X6           -0.023330   0.094705  -0.246  0.80548    
+## X7           19.932736   0.813986  24.488  &lt; 2e-16 ***
+## X8            0.203777   0.069918   2.915  0.00367 ** 
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Residual standard error: 2.934 on 760 degrees of freedom
+## Multiple R-squared:  0.9162, Adjusted R-squared:  0.9154 
+## F-statistic:  1187 on 7 and 760 DF,  p-value: &lt; 2.2e-16</code></pre>
+<p><strong>Nhận xét</strong></p>
+<ul>
+<li><p>Đối với biến <strong>X4</strong> ta không tìm được hệ số hồi quy và tính được các thông số liên quan, có thể giải thích <strong>X4</strong> là một biến phụ thuộc theo các biến còn lại (diện tích mái nhà có thể phụ thuộc vào diện tích tường hoặc diện tích bề mặt,…). Do vậy ta sẽ loại bỏ <strong>X4</strong> ra khỏi mô hình hồi quy.</p></li>
+<li><p>Mô hình hồi quy tuyến tính: <span class="math inline">\(\textit{Y1} = 84.013418 - 64.773432.\textit{X1} - 0.087289.\textit{X2} + ... + 19.932736.\textit{X7} + 0.203777.\textit{X8}\)</span>.</p></li>
+<li><p>Ta thấy rằng p-value tương ứng với thống kê F bé hơn 2.2e−16, có ý nghĩa rất cao. Điều này chỉ ra rằng, ít nhất một biến dự báo trong mô hình có ý nghĩa giải thích rất cao cho biến mức độ thu nhiệt <strong>Y1</strong>.</p></li>
+<li><p>Ta cũng nhận thấy rằng p-value của bài toán kiểm định giả thuyết H0: Hệ số ứng với <strong>X6</strong> không có ý nghĩa thống kê <span class="math inline">\((\alpha_6 = 0)\)</span> bằng 0.80548 cho thấy rằng biến <strong>X6</strong> này không có ý nghĩa đối với mô hình hồi quy ta vừa xây dựng, do đó ta có thể loại bỏ biến <strong>X6</strong> ra khỏi mô hình hồi quy.</p></li>
+</ul>
+<p>Xây dựng lại mô hình hồi quy tuyến tính với biến phụ thuộc là Y1, và các biến độc lập lúc này là: <strong>X1</strong>, <strong>X2</strong>, <strong>X3</strong>, <strong>X5</strong>, <strong>X7</strong>, <strong>X8</strong>.</p>
+<pre class="r"><code>model_2 = lm(Y1~X1+X2+X3+X5+X7+X8,heat_data)  #Xay dung lai mo hinh hoi quy tuyen tinh
+summary(model_2)  #Tom tat ket qua</code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = Y1 ~ X1 + X2 + X3 + X5 + X7 + X8, data = heat_data)
+## 
+## Residuals:
+##     Min      1Q  Median      3Q     Max 
+## -9.9315 -1.3189 -0.0262  1.3587  7.7169 
+## 
+## Coefficients:
+##               Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)  83.931762  19.018978   4.413 1.17e-05 ***
+## X1          -64.773432  10.283096  -6.299 5.06e-10 ***
+## X2           -0.087289   0.017065  -5.115 3.97e-07 ***
+## X3            0.060813   0.006644   9.153  &lt; 2e-16 ***
+## X5            4.169954   0.337781  12.345  &lt; 2e-16 ***
+## X7           19.932736   0.813484  24.503  &lt; 2e-16 ***
+## X8            0.203777   0.069875   2.916  0.00365 ** 
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Residual standard error: 2.933 on 761 degrees of freedom
+## Multiple R-squared:  0.9162, Adjusted R-squared:  0.9155 
+## F-statistic:  1387 on 6 and 761 DF,  p-value: &lt; 2.2e-16</code></pre>
+<p><strong>Nhận xét:</strong></p>
+<ul>
+<li><p>Mô hình hồi quy tuyến tính về sự ảnh hưởng các nhân tố (<strong>X1, X2, X3, X5, X7, X8</strong>) lên <strong>Y1</strong>: <span class="math inline">\(\textit{Y1} = 83.931762 - 64.773432.\textit{X1} - 0.087289.\textit{X2} + ... + 19.932736.\textit{X7} + 0.203777.\textit{X8}\)</span>.</p></li>
+<li><p>Hệ số xác định hiệu chỉnh (Adjusted R-squared): <span class="math inline">\(R^2\)</span> hiệu chỉnh = 0.9155 nghĩa là 91.55% sự biến thiên trong mức độ thu nhiệt <strong>Y1</strong> được giải thích bởi các biến độc lập (<strong>X1, X2, X3, X5, X7, X8</strong>).</p></li>
+<li><p>Để xét ảnh hưởng cụ thể của từng biến độc lập, ta xét các hệ số hồi quy <span class="math inline">\((\alpha_i)\)</span> và p-value tương ứng. Ta thấy rằng p-value tương ứng với các biến <strong>X3, X5, X7</strong> đều bé hơn 2e−16, điều này nói lên rằng ảnh hưởng của ba biến có ý nghĩa rất cao lên biến mức độ thu nhiệt <strong>Y1</strong>. Mặt khác, hệ số hồi quy của một biến độc lập cũng có thể được xem như ảnh hưởng trung bình lên biến phụ thuộc <strong>Y1</strong> khi tăng một đơn vị của biến dự báo đó, giả sử rằng các biến dự báo khác không đổi. Cụ thể, hệ số hồi quy ứng với biến <strong>X1</strong> <span class="math inline">\(\alpha_1 = - 64.773432\)</span> thì với mỗi khi độ nhỏ gọn tăng 1 đơn vị, ta có thể kỳ vọng mức độ thu nhiệt của ngồi nhà sẽ giảm đi 64.773432 đơn vị về mặt trung bình (giả sử rằng các biến độc lập khác không thay đổi). Hệ số hồi quy ứng với biến X2 <span class="math inline">\(\alpha_2 = - 0.087289\)</span> thì mỗi khi tăng 1 <span class="math inline">\(m^2\)</span> diện tích bề mặt, ta có thể kỳ vọng rằng mức độ thu nhiệt sẽ giảm đi 0.087289 đơn vị về mặt trung bình (giả sử rằng các biến độc lập khác không thay đổi). Tương tự đối với các biến còn lại.</p></li>
+</ul>
+<p><strong>Kiểm tra các giả định của mô hình.</strong> Nhắc lại các giả định của mô hình hồi quy:</p>
+<ul>
+<li><p>Tính tuyến tính của dữ liệu: mối quan hệ giữa biến dự báo X và biến phụ thuộc Y được giả sử là tuyến tính.</p></li>
+<li><p>Sai số có phân phối chuẩn.</p></li>
+<li><p>Các sai số <span class="math inline">\(\epsilon_1,...,\epsilon_n\)</span> độc lập với nhau.</p></li>
+<li><p>Phương sai của các sai số là hằng số: <span class="math inline">\(\epsilon_n \sim N(0,\sigma^2)\)</span></p></li>
+</ul>
+<p>Ta thực hiện phân tích thặng dư để kiểm tra các giả định của mô hình:</p>
+<pre class="r"><code>plot(model_2) #Ve bieu do phan tich thang du kiem tra gia dinh</code></pre>
+<p><img src="index_files/figure-html/unnamed-chunk-19-1.png" width="672" /><img src="index_files/figure-html/unnamed-chunk-19-2.png" width="672" /><img src="index_files/figure-html/unnamed-chunk-19-3.png" width="672" /><img src="index_files/figure-html/unnamed-chunk-19-4.png" width="672" /></p>
+<ul>
+<li><p>Đồ thị thứ 1 (<strong>Residuals vs Fitted</strong>) vẽ các giá trị dự báo với các giá trị thặng dư (sai số) tương ứng, dùng để kiểm tra tính tuyến tính của dữ liệu (giả định 1) và tính đồng nhất của các phương sai sai số (giả định 3). Nếu như giả định về tính tuyến tính của dữ liệu KHÔNG thỏa, ta sẽ quan sát thấy rằng các điểm thặng dư (residuals) trên đồ thị sẽ phân bố theo một hình mẫu (pattern) đặc trưng nào đó (ví dụ parabol). Nếu đường màu đỏ trên đồ thị phân tán là đường thẳng nằm ngang mà không phải là đường cong, thì giả định tính tuyến tính của dữ liệu được thỏa mãn. Để kiểm tra giả định thứ 3 (phương sai đồng nhất) thì các điểm thặng dự phải phân tán đều nhau xung quanh đường thẳng y=0</p></li>
+<li><p>Đồ thị thứ 2 (<strong>Normal Q-Q</strong>) cho phép kiểm tra giả định về phân phối chuẩn của các sai số. Nếu các điểm thặng dư nằm trên cùng 1 đường thẳng thì điều kiện về phân phối chuẩn được thỏa.</p></li>
+<li><p>Đồ thị thứ 3 (<strong>Scale - Location</strong>) vẽ căn bậc hai của các giá trị thặng dư được chuẩn hóa với các giá trị dự báo, được dùng để kiểm tra giả định thứ 3 (phương sai của các sai số là hằng số). Nếu như đường màu đỏ trên đồ thị là đường thẳng nằm ngang và các điểm thặng dư phân tán đều xung quanh đường thẳng này thì giả định thứ 3 được thỏa. Nếu như đường màu đỏ có độ dốc (hoặc cong) hoặc các điểm thặng dư phân tán không đều xung quanh đường thẳng này, thì giả định thứ 3 bị vi phạm.</p></li>
+<li><p>Đồ thị thứ 4 (<strong>Residuals vs Leverage</strong>) cho phép xác định những điểm có ảnh hưởng cao (influential observations), nếu chúng có hiện diện trong bộ dữ liệu. Những điểm có ảnh hưởng cao này có thể là các điểm outliers, là những điểm có thể gây nhiều ảnh hưởng nhất khi phân tích dữ liệu. Nếu như ta quan sát thấy một đường thẳng màu đỏ đứt nét (Cook’s distance), và có một số điểm vượt qua đường thẳng khoảng cách này, nghĩa là các điểm đó là các điểm có ảnh hưởng cao. Nếu như ta chỉ quan sát thấy đường thẳng khoảng cách Cook ở góc của đồ thị và không có điểm nào vượt qua nó, nghĩa không có điểm nào thực sự có ảnh hưởng cao.</p></li>
+</ul>
+<p><strong>Nhận xét:</strong></p>
+<ul>
+<li><p>Đồ thị <strong>Normal Q-Q</strong> cho thấy giả định sai số có phân phối chuẩn chưa thực sự thỏa mãn.</p></li>
+<li><p>Đồ thị thứ 1 (<strong>Residuals vs Fitted</strong>) cho thấy giả định về tính tuyến tính của dữ liệu hơi bị vi phạm, ta có thể thấy rằng sự vi phạm này bởi vì mối quan hệ giữa <strong>Y1</strong> và các biến còn lại là phi tuyến tính.</p></li>
+<li><p>Đồ thị thứ 1 và thứ 3 (<strong>Scale - Location</strong>) cho ta thấy rằng giả định về tính đồng nhất của phương sai cũng hơi bị vi phạm. Tuy nhiên, ta cũng thấy này sự vi phạm này tương đối nhỏ và có thể chấp nhận được.</p></li>
+<li><p>Đồ thị thứ tư chỉ ra có các quan trắc thứ 16, 22 và 24 có thể là các điểm có ảnh hưởng cao trong bộ dữ liệu.</p></li>
+<li><p>Tuy nhiên ta cũng quan sát thấy rằng các điểm này chưa vượt qua đường thẳng khoảng cách Cook (đường thẳng đứt nét màu đỏ Cook’s distance). Do vậy, các điểm này chưa thực sự là các điểm có ảnh hưởng cao trong bộ dữ liệu. Do đó ta không cần phải loại bỏ chúng khi phân tích</p></li>
+</ul>
+<p><strong>5. So sánh trung bình mức thu nhiệt và toả nhiệt của các ngôi nhà.</strong> Sử dụng lệnh <strong>apply</strong>, <strong>mean</strong> để tính trung bình <strong>Y1</strong> và <strong>Y2</strong>:</p>
+<pre class="r"><code>apply(heat_data[,c(&quot;Y1&quot;,&quot;Y2&quot;)],2,mean)  </code></pre>
+<pre><code>##       Y1       Y2 
+## 22.30720 24.58776</code></pre>
+<p>Ta sử dụng lệnh <strong>boxplot</strong> để so sánh trung bình <strong>Y1</strong> và <strong>Y2</strong>:</p>
+<pre class="r"><code>par(mfrow = c(1, 2))
+boxplot(heat_data$Y1,ylab=&quot;Heat Load&quot;,main=&quot;Boxplot of Heat Load&quot;,col=&quot;red&quot;) #vẽ biểu đồ phân phối của mức độ thu nhiệt của các ngôi nhà
+boxplot(heat_data$Y2,ylab=&quot;Cool Load&quot;,main=&quot;Boxplot of Cool Load&quot;,col=&quot;green&quot;) #vẽ biểu đồ phân phối của mức độ toả nhiệt của các ngôi nhà</code></pre>
+<p><img src="index_files/figure-html/unnamed-chunk-21-1.png" width="672" /></p>
+<p><strong>Nhận xét:</strong> Dựa trên trung bình mẫu và biểu đồ <strong>boxplot</strong>, ta nhận thấy mức độ thu nhiệt trung bình có xu hướng thấp hơn mức độ toả nhiệt trung bình, tuy nhiên để đánh giá lại điều đó là ngẫu nhiên hay nó thực sự mức độ thu nhiệt trung bình có xu hướng thấp hơn toả nhiệt, ta cần thực hiện kiểm định trung bình so sánh mức độ thu nhiệt và toả nhiệt giữa các ngôi nhà.</p>
+<p>Ta sử dụng lệnh <strong>t-test</strong> để thực hiện so sánh trung bình mức thu nhiệt và toả nhiệt của các ngôi nhà:</p>
+<pre class="r"><code>t.test(heat_data$Y1,heat_data$Y2, paired = T) </code></pre>
+<pre><code>## 
+##  Paired t-test
+## 
+## data:  heat_data$Y1 and heat_data$Y2
+## t = -28.358, df = 767, p-value &lt; 2.2e-16
+## alternative hypothesis: true difference in means is not equal to 0
+## 95 percent confidence interval:
+##  -2.438434 -2.122696
+## sample estimates:
+## mean of the differences 
+##               -2.280565</code></pre>
+<pre class="r"><code>##So sánh trung bình mức thu nhiệt và toả nhiệt của các ngôi nhà</code></pre>
+<p><strong>Nhận xét:</strong></p>
+<p>Giả thuyết H0: <span class="math inline">\(\mu_1 = \mu_2\)</span> hay <span class="math inline">\(\mu_D = 0\)</span>: Mức độ thu nhiệt trung bình và mức độ toả nhiệt trung bình bằng nhau (không có sự khác biệt giữa mức độ thu nhiệt trung bình và toả nhiệt trung bình của các ngôi nhà)</p>
+<p>Giả thuyết H1: <span class="math inline">\(\mu_1 &lt; \mu_2\)</span> hay <span class="math inline">\(\mu_D &lt; 0\)</span>: Mức độ thu nhiệt trung bình thấp hơn mức độ toả nhiệt trung bình.</p>
+<p>Dựa trên kết quả, ta nhận đọc được các kết quả:</p>
+<ul>
+<li><p>Thống kê kiểm định: t = -28.358, bậc tự do 767 và p-value &lt; 2.2e-16, rất bé nên ta có đủ bằng chứng mạnh để bác bỏ H0. Ta kết luận là mức độ thu nhiệt trung bình thấp hơn so với mức độ toả nhiệt trung bình của các ngôi nhà.</p></li>
+<li><p>Sự khác biệt giữa trung bình mức độ thu nhiệt và mức độ tỏa nhiệt là -2.280565 và khoảng tin cậy 95% cho sự khác biệt giữa trung bình mức độ thu nhiệt và mức độ tỏa nhiệt: (-2.438434; -2.122696).</p></li>
+</ul>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
